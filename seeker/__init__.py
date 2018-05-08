@@ -3,7 +3,7 @@ __version__ = '3.0-dev'
 from .facets import Facet, GlobalTermsFacet, RangeFilter, TermsFacet, YearHistogram, NestedFacet, DateTermsFacet, DateRangeFacet
 from .mapping import (
     DEFAULT_ANALYZER, Indexable, ModelIndex, RawMultiString, RawString, build_mapping, deep_field_factory,
-    document_field, document_from_model)
+    document_field, document_from_model, FieldObject, SeekerFieldObjectException)
 from .registry import app_documents, documents, model_documents, register
 from .utils import delete, index, search
 from .views import Column, AdvancedColumn, SeekerView, AdvancedSeekerView, AdvancedSavedSearchView

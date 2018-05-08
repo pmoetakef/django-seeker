@@ -7,7 +7,7 @@ import elasticsearch_dsl as dsl
 import six
 
 import logging
-
+import facets
 
 logger = logging.getLogger(__name__)
 
@@ -291,3 +291,116 @@ def document_from_model(model_class, document_class=ModelIndex, fields=None, exc
         'queryset': classmethod(lambda cls: model_class.objects.all()),
         '__module__': module,
     })
+
+
+class FieldObject:
+    """
+    FieldObject tries to make mappings easier and cleaner.
+    """
+    facet_specific_attrs = {'TermsFacet': [],
+                            'GlobalTermsFacet': [],
+                            'YearHistogram': [],
+                            'RangeFilter': ['ranges', 'include_missing', 'missing_label'],
+                            'NestedFacet': ['field'],
+                            'DateRangeFacet': ['format'],
+                            'DateTermsFacet': [],
+                            'NotAFacet': []
+                            }
+
+    def __init__(self, field_id, field_label, sort_order, facet_type, field_sort_suffix='', initial_field=False,
+                 field_unit='', required_display=None, **kwargs):
+        """
+        A field object can be created using following attributes:
+
+        :param field_id: the field id used in dsl mapping
+        :param field_label: A human readable field label associated with the field id.
+        :param sort_order: Sort oder for facets and display fields
+        :param facet_type: The type of seeker facet to be created. If this field object is a facet-less object,
+                use 'NotAFacet'. Additional facet specific attributes can be provided through kwargs.
+        :param field_sort_suffix: A suffix for the the field id. The default is ''
+        :param initial_field: Whether the field should be considered as initial facet or initial display
+        :param field_unit: The unit associated with the field. If unit is provided get_field_label and get_field_header
+                produce appropriate label and header formats, respectively.
+        :param required_display: Can be set to the index if display field is a required one. Otherwise None means not
+                required.
+        :param kwargs: Any additional facet specific attributes can be provided here. Allowed attributes can be found
+                in facet_specific_attrs
+        """
+        self.field_id = field_id
+        self.field_unit = field_unit
+        self.field_label = field_label
+        self.sort_order = sort_order
+        self.field_sort_suffix = field_sort_suffix or ''
+        if facet_type not in self.facet_specific_attrs:
+            raise SeekerFieldObjectException("Error: Facet type not recognized.")
+        self.facet_type = facet_type
+        self.initial_field = initial_field
+        self.facet_attrs = {}
+        self.populate_facet_attrs(kwargs)
+        self.required_display = required_display
+
+    def populate_facet_attrs(self, attrs):
+        """
+        Populates facet_attrs with the allowed facet specific attributes provided through kwargs (attrs)
+        """
+        for facet_attr in attrs:
+            if facet_attr in self.facet_specific_attrs[self.facet_type]:
+                self.facet_attrs[facet_attr] = attrs[facet_attr]
+        if self.facet_type == 'NestedFacet' and 'field' not in self.facet_attrs:
+            raise SeekerFieldObjectException("Error: nested field id (field) for NestedFacet is missing.")
+
+    def create_seeker_facet(self):
+        """
+        Creates and returns a seeker facet object based on the provided facet type and additional arguments.
+        :return: seeker facet object
+        """
+        if self.facet_type == 'NotAFacet':
+            return None
+        seeker_facet_func = getattr(facets, self.facet_type)
+        return seeker_facet_func(self.get_extended_field_id(), label=self.get_field_label(), **self.facet_attrs)
+
+    def get_extended_field_id(self):
+        """
+        :return: Returns field id concatenated with the field sort suffix if provided
+        """
+        return '{}{}'.format(self.field_id, self.field_sort_suffix)
+
+    def get_field_header(self):
+        """
+        :return:  Returns appropriate field header. If field unit is provided the label and unit are separated by an
+                html break <br /> tag.
+        """
+        return ('{}<br />({})'.format(self.field_label, self.field_unit) if self.field_unit else self.field_label)
+
+    def get_initial_facet_name(self):
+        """
+        :return: Returns field name if facet type is Nested otherwise extended field id.
+        """
+        return self.facet_attrs['field'] if self.facet_type == 'NestedFacet' else self.get_extended_field_id()
+
+    def get_required_display(self):
+        """
+        :return: Returns a tuple of (field_id, index) if required dispaly is set otherwise None
+        """
+        return (self.field_id, self.required_display) if (self.required_display is not None) else None
+
+    def get_field_label(self):
+        """
+        :return: Returns a proper field label. If label is provided the unit is added to the field label in proper
+                format, otherwise field label is returned.
+        """
+        return ('{} ({})'.format(self.field_label, self.field_unit) if self.field_unit else self.field_label)
+
+
+class SeekerFieldObjectException(Exception):
+    """Base exception for FieldObject exceptions"""
+    message = 'Base FieldObject Exception'
+
+    def __init__(self, msg=''):
+        self.message = msg
+        Exception.__init__(self, msg)
+
+    def __repr__(self):
+        return self.message
+
+    __str__ = __repr__

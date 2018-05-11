@@ -1319,7 +1319,7 @@ class AdvancedSeekerView (SeekerView):
         elif all(k in advanced_query for k in ('condition', 'rules')):
             group_operator = self.boolean_translations.get(advanced_query.get('condition'), None)
             if not group_operator:
-                raise ValueError(u"'{}' is not a valid boolean operator.".format(v))
+                raise ValueError(u"'{}' is not a valid boolean operator.".format(advanced_query.get('condition')))
             
             queries = []
             selected_facets = []
